@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bakers Fuel Prices</title>
+</head>
+<body style="background:#050505;color:white;text-align:center;font-family:Arial">
+<h1>Basingstoke Fuel Prices</h1>
+<div id="data">Loading...</div>
+<script>
+fetch('/.netlify/functions/fuel-data')
+.then(r=>r.json())
+.then(d=>{
+document.getElementById('data').innerHTML =
+"<h2>Petrol: " + d.petrol.price + " - " + d.petrol.station + "</h2>" +
+"<h2>Diesel: " + d.diesel.price + " - " + d.diesel.station + "</h2>" +
+"<h2>Average: " + d.average.petrol + "</h2>";
+});
+</script>
+</body>
+</html>
