@@ -3,13 +3,14 @@ exports.handler = async () => {
     const tokenRes = await fetch(process.env.TOKEN_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json"
       },
-      body: JSON.stringify({
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
         client_id: process.env.CLIENT_ID,
         client_secret: process.env.CLIENT_SECRET
-      })
+      }).toString()
     });
 
     if (!tokenRes.ok) {
@@ -106,6 +107,10 @@ exports.handler = async () => {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: err.message || String(err) })
+    };
+  }
+};
       body: JSON.stringify({ error: err.message || String(err) })
     };
   }
