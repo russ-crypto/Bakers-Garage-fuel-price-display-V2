@@ -1,7 +1,5 @@
-// updated
 exports.handler = async () => {
   try {
-    // 🔐 Step 1: Get access token
     const tokenRes = await fetch(process.env.TOKEN_URL, {
       method: "POST",
       headers: {
@@ -18,7 +16,8 @@ exports.handler = async () => {
       const text = await tokenRes.text();
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: "Token failed: " + text })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: `Token failed: ${tokenRes.status} ${text}` })
       };
     }
 
@@ -31,11 +30,11 @@ exports.handler = async () => {
     if (!accessToken) {
       return {
         statusCode: 500,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ error: "No access token returned" })
       };
     }
 
-    // ⛽ Step 2: Get fuel data
     const fuelRes = await fetch(process.env.API_URL, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -47,17 +46,19 @@ exports.handler = async () => {
       const text = await fuelRes.text();
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: "Fuel API failed: " + text })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: `Fuel API failed: ${fuelRes.status} ${text}` })
       };
     }
 
     const fuelJson = await fuelRes.json();
-    const stations = fuelJson.stations || fuelJson.data || [];
+    const stations = fuelJson.stations || fuelJson.data || fuelJson.results || [];
 
-    // 📍 Filter Basingstoke
     const basingstoke = stations.filter((s) => {
       const text = [
         s.address,
+        s.address1,
+        s.address2,
         s.town,
         s.city,
         s.postcode,
@@ -77,12 +78,10 @@ exports.handler = async () => {
       );
     });
 
-    // ⛽ Petrol
     const petrolSites = basingstoke
       .filter((s) => s.fuelPrices?.E10 != null)
       .sort((a, b) => Number(a.fuelPrices.E10) - Number(b.fuelPrices.E10));
 
-    // ⛽ Diesel
     const dieselSites = basingstoke
       .filter((s) => s.fuelPrices?.B7 != null)
       .sort((a, b) => Number(a.fuelPrices.B7) - Number(b.fuelPrices.B7));
@@ -95,10 +94,10 @@ exports.handler = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         petrol: petrol
-          ? `${petrol.fuelPrices.E10}p - ${petrol.brand || petrol.siteName || petrol.name}`
+          ? `${petrol.fuelPrices.E10}p - ${petrol.brand || petrol.siteName || petrol.name || "Unknown station"}`
           : "N/A",
         diesel: diesel
-          ? `${diesel.fuelPrices.B7}p - ${diesel.brand || diesel.siteName || diesel.name}`
+          ? `${diesel.fuelPrices.B7}p - ${diesel.brand || diesel.siteName || diesel.name || "Unknown station"}`
           : "N/A",
         average: "Live"
       })
@@ -106,6 +105,7 @@ exports.handler = async () => {
   } catch (err) {
     return {
       statusCode: 500,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ error: err.message || String(err) })
     };
   }
