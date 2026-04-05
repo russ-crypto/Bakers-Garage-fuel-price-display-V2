@@ -1,48 +1,111 @@
 exports.handler = async () => {
-  const tokenResponse = await fetch(process.env.TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: process.env.CLIENT_ID,
-      client_secret: process.env.CLIENT_SECRET,
-      scope: "fuel-prices"
-    })
-  });
+  try {
+    // 🔐 Step 1: Get access token
+    const tokenRes = await fetch(process.env.TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({
+        client_id: process.env.CLIENT_ID,
+        client_secret: process.env.CLIENT_SECRET
+      })
+    });
 
-  const tokenData = await tokenResponse.json();
-
-  const fuelResponse = await fetch(process.env.API_URL, {
-    headers: {
-      Authorization: `Bearer ${tokenData.access_token}`
+    if (!tokenRes.ok) {
+      const text = await tokenRes.text();
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Token failed: " + text })
+      };
     }
-  });
 
-  const fuelData = await fuelResponse.json();
+    const tokenJson = await tokenRes.json();
+    const accessToken =
+      tokenJson.access_token ||
+      tokenJson.accessToken ||
+      tokenJson.token;
 
-  // Filter Basingstoke (rough area filter)
-  const stations = fuelData.stations || [];
+    if (!accessToken) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "No access token returned" })
+      };
+    }
 
-  const basingstoke = stations.filter(s =>
-    s.address?.toLowerCase().includes("basingstoke")
-  );
+    // ⛽ Step 2: Get fuel data
+    const fuelRes = await fetch(process.env.API_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json"
+      }
+    });
 
-  const petrol = basingstoke
-    .filter(s => s.fuelPrices?.E10)
-    .sort((a, b) => a.fuelPrices.E10 - b.fuelPrices.E10)[0];
+    if (!fuelRes.ok) {
+      const text = await fuelRes.text();
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Fuel API failed: " + text })
+      };
+    }
 
-  const diesel = basingstoke
-    .filter(s => s.fuelPrices?.B7)
-    .sort((a, b) => a.fuelPrices.B7 - b.fuelPrices.B7)[0];
+    const fuelJson = await fuelRes.json();
+    const stations = fuelJson.stations || fuelJson.data || [];
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      petrol: petrol ? petrol.fuelPrices.E10 + "p - " + petrol.brand : "N/A",
-      diesel: diesel ? diesel.fuelPrices.B7 + "p - " + diesel.brand : "N/A",
-      average: "Live"
-    })
-  };
+    // 📍 Filter Basingstoke
+    const basingstoke = stations.filter((s) => {
+      const text = [
+        s.address,
+        s.town,
+        s.city,
+        s.postcode,
+        s.brand,
+        s.siteName,
+        s.name
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        text.includes("basingstoke") ||
+        text.includes("rg21") ||
+        text.includes("rg22") ||
+        text.includes("rg24")
+      );
+    });
+
+    // ⛽ Petrol
+    const petrolSites = basingstoke
+      .filter((s) => s.fuelPrices?.E10 != null)
+      .sort((a, b) => Number(a.fuelPrices.E10) - Number(b.fuelPrices.E10));
+
+    // ⛽ Diesel
+    const dieselSites = basingstoke
+      .filter((s) => s.fuelPrices?.B7 != null)
+      .sort((a, b) => Number(a.fuelPrices.B7) - Number(b.fuelPrices.B7));
+
+    const petrol = petrolSites[0];
+    const diesel = dieselSites[0];
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        petrol: petrol
+          ? `${petrol.fuelPrices.E10}p - ${petrol.brand || petrol.siteName || petrol.name}`
+          : "N/A",
+        diesel: diesel
+          ? `${diesel.fuelPrices.B7}p - ${diesel.brand || diesel.siteName || diesel.name}`
+          : "N/A",
+        average: "Live"
+      })
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message || String(err) })
+    };
+  }
 };
