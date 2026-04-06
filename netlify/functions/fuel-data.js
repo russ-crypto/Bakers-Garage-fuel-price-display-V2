@@ -3,14 +3,13 @@ exports.handler = async function () {
     const tokenRes = await fetch(process.env.TOKEN_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
         "Accept": "application/json"
       },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
+      body: JSON.stringify({
         client_id: process.env.CLIENT_ID,
         client_secret: process.env.CLIENT_SECRET
-      }).toString()
+      })
     });
 
     const tokenText = await tokenRes.text();
@@ -40,10 +39,7 @@ exports.handler = async function () {
       };
     }
 
-    const accessToken =
-      tokenJson.access_token ||
-      tokenJson.accessToken ||
-      tokenJson.token;
+    const accessToken = tokenJson.access_token || tokenJson.token;
 
     if (!accessToken) {
       return {
@@ -76,24 +72,10 @@ exports.handler = async function () {
       };
     }
 
-    let fuelJson;
-    try {
-      fuelJson = JSON.parse(fuelText);
-    } catch {
-      return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          error: "Fuel API did not return JSON",
-          detail: fuelText
-        })
-      };
-    }
-
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fuelJson)
+      body: fuelText
     };
   } catch (err) {
     return {
